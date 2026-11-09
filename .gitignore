@@ -1,0 +1,16 @@
+data/
+log/
+__pycache__/
+*.pyc
+*.pid
+
+# interface_20260623 编译产物（机器人上使用 ~/lxl/interface_20260623/install）
+interface_20260623/build/
+interface_20260623/install/
+interface_20260623/log/
+
+# 官方参考包，新项目已自包含
+XRoboToolkit-Teleop-Sample-Python-1.0.3/
+
+# 运行日志
+EC_Line_Control/*.log

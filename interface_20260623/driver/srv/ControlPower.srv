@@ -1,0 +1,4 @@
+PowerData[] data
+---
+uint32 error_code
+string error_msg

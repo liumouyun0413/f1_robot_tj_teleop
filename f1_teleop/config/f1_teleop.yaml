@@ -1,0 +1,158 @@
+# ============================================================================
+# F1 轮式人形机器人遥操作配置（f1_teleop）
+# ----------------------------------------------------------------------------
+# 所有可调参数集中于此文件，改参数无需改代码。
+# 角度单位：除特别说明外，真机侧一律为【度】，Placo/URDF 侧一律为【弧度】。
+# ============================================================================
+
+robot:
+  # Placo IK 使用的 URDF（相对本配置文件所在目录的 ../../assets，或绝对路径）
+  urdf_path: assets/f1_wheel/urdf/f1_wheel_0602_new.urdf
+
+  # 真机关节名（/hal/joint_states 与 /motion_ctl/joint_ctl 共用）
+  left_joint_names:  [arm_l_j1, arm_l_j2, arm_l_j3, arm_l_j4, arm_l_j5, arm_l_j6, arm_l_j7]
+  right_joint_names: [arm_r_j1, arm_r_j2, arm_r_j3, arm_r_j4, arm_r_j5, arm_r_j6, arm_r_j7]
+  head_joint_names:  [head_j1, head_j2, head_j3]
+  body_joint_names:  [body_j1, body_j2, body_j3, body_j4, body_j5]
+
+  # URDF 关节名（Placo 内部使用）
+  urdf_left_joint_names:  [arm_L_joint1, arm_L_joint2, arm_L_joint3, arm_L_joint4, arm_L_joint5, arm_L_joint6, arm_L_joint7]
+  urdf_right_joint_names: [arm_R_joint1, arm_R_joint2, arm_R_joint3, arm_R_joint4, arm_R_joint5, arm_R_joint6, arm_R_joint7]
+
+  # 末端 link（IK frame task 目标）
+  left_ee_link:  arm_L_Link7
+  right_ee_link: arm_R_Link7
+  # 肩部 link（球形工作空间限制的球心，workspace_radius 为 null 时不用）
+  left_shoulder_link:  arm_L_Link1
+  right_shoulder_link: arm_R_Link1
+
+  # Placo 弧度 → 真机度 的线性映射：deg = sign * rad2deg(rad) + offset_deg
+  # 由 lxl_0918 的 angle_map + sync_placo_to_real + 启动偏差补偿三者合并推导而来，
+  # 两个方向（真机→Placo 同步 / Placo→真机下发）共用同一组参数，保证自洽。
+  joint_map:
+    left:
+      sign:       [ 1, -1,  1, -1,  1, -1,  1]
+      offset_deg: [180, 0,  0,  0,  0,  0,  0]
+    right:
+      sign:       [ 1,  1,  1,  1, -1, -1,  1]
+      offset_deg: [ 0,  0,  0,  0,  0,  0,  0]
+
+  # 启动回零位姿 / X+Y 复位位姿（真机度，左臂 7 + 右臂 7）
+  home_pose:
+    left:  [ 90, -90, -90,  -90, 0, 0, 0]
+    right: [-90, -90,  90,  -90, 0, 0, 0]
+  reset_pose:
+    left:  [ 110, -90, -90, -110, 0, 0, 0]
+    right: [-110, -90,  90, -110, 0, 0, 0]
+  home_duration_sec: 3.0    # 启动回零位插值时长
+  reset_duration_sec: 2.0   # X+Y 复位插值时长
+  move_rate_hz: 50          # 回零/复位插值发布频率
+
+# ----------------------------------------------------------------------------
+ros:
+  node_name: f1_teleop
+  joint_cmd_topic:   /motion_ctl/joint_ctl           # JointState（度）
+  joint_state_topic: /hal/joint_states               # JointState（度）
+  gripper_left_cmd_topic:  /motion_ctl/gripper/left  # control_msgs/GripperCommand
+  gripper_right_cmd_topic: /motion_ctl/gripper/right
+  waist_cmd_topic: /control/waist/updown             # std_msgs/Bool，True 升 / False 降（EC_Line_Control 节点）
+  # 数采镜像（主端数据）
+  lead_joint_state_topic: /lead/joint_states         # 17 关节：arm_L_joint1..7, arm_R_joint1..7, head_j1..3（度）
+  lead_left_tcp_topic:  /lead/left_tcp               # PICO 手柄位姿 [x,y,z,rx,ry,rz]，frame_id press_pico/un_press_pico
+  lead_right_tcp_topic: /lead/right_tcp
+  lead_publish_rate_hz: 30.0
+  # 外部位姿回放（可选）：为 True 时用下列 topic 替代 XR 手柄作为双臂输入
+  replay_mode_topic: /lead_tcp/replay_mode           # std_msgs/Bool
+  replay_left_tcp_topic:  /lead/left_tcp_control
+  replay_right_tcp_topic: /lead/right_tcp_control
+  # 外部相机录制器启停信号（std_msgs/String）
+  tianji_start_topic: /tianji/start_recording
+  tianji_stop_topic:  /tianji/stop_recording
+
+# ----------------------------------------------------------------------------
+teleop:
+  control_rate_hz: 100       # IK 与下发线程频率
+  scale_factor: 1.5          # 手柄位移 → 末端位移放大倍数
+  grip_activate_threshold: 0.9   # 握把 > 该值视为激活该臂
+  # IK 权重（沿用 lxl_0918 在本机型上调好的值）
+  ik:
+    frame_task_weight: 10.0
+    manipulability_weight: 1.0e-4
+    joint_regularization_weight: 1.0
+  # 球形工作空间限制半径（m，球心为肩部 link）；null 表示不限制
+  workspace_radius: null
+  # 下发指令每关节最大速度（°/s），限制安全门解冻 / IK 跳解时的阶跃
+  max_joint_speed_deg_s: 180.0
+  # 夹爪指令：trigger=0 → open_cmd，trigger=1 → close_cmd
+  gripper:
+    open_cmd: 100.0
+    close_cmd: 0.0
+    max_effort: 15.0
+    publish_rate_hz: 30.0
+  # 单键长按确认时间（Y 升腰 / X 降腰），避免与 X+Y 复位误触
+  waist_button_hold_sec: 0.3
+
+# ----------------------------------------------------------------------------
+head:
+  trigger_threshold: 0.5         # 右扳机 >= 该值进入头部模式（dead man's switch）
+  grip_release_threshold: 0.1    # 双臂握把均 < 该值（未在控臂）
+  deadzone: 0.1
+  step_deg_per_frame: 0.3        # 每帧最大增量（100Hz 下约 30°/s）
+  limits_deg:                    # [yaw(head_j1), pitch(head_j2), roll(head_j3)]
+    - [-40.0, 40.0]
+    - [-25.0, 25.0]
+    - [-15.0, 15.0]
+  invert_yaw: true               # 右摇杆 X
+  invert_pitch: true             # 左摇杆 Y
+  invert_roll: true              # 左摇杆 X
+  frame_id: base_link
+
+# ----------------------------------------------------------------------------
+chassis:
+  move_topic: /move/ManualMoveCmd          # geometry_msgs/TwistStamped
+  control_mode_service: /move/SetControlMode   # move/srv/SetControlMode
+  control_mode_value: 1
+  frame_id: base_link
+  publish_rate_hz: 30.0
+  deadzone: 0.1
+  max_linear: 0.8      # m/s
+  max_angular: 0.5     # rad/s
+  trigger_up: 0.8      # 右摇杆上拨 >= 该值 → 使能
+  trigger_down: 0.8    # 右摇杆下拨 <= -该值 → 解除并刹车
+  invert_linear_x: false
+  invert_linear_y: true
+  invert_angular_z: false
+
+# ----------------------------------------------------------------------------
+safety:
+  enable: true
+  enable_com_guard: true          # 质心保护
+  enable_collision_guard: true    # 手臂-机身碰撞检测
+  # cyb_safe_control_real 的 python 模块目录（含 com_and_collision_protect_modules.py）
+  # 机器人上实际部署的是加密版 cyb_dist（2026-11-09 核实）
+  module_dir: /home/user/cyb_safe_control_real/cyb_dist/src/python
+  check_rate_hz: 15.0
+  warn_interval_sec: 3.0
+
+# ----------------------------------------------------------------------------
+recording:
+  enable: true
+  # ros2 bag 输出目录（episode_XXXXXX）；相对路径按项目根目录解析
+  bag_dir: data/all_data
+  storage: mcap
+  validate: true                   # 开始前检查 topic 发布者 / 结束后校验消息数
+  topics:
+    - /hal/joint_states
+    - /motion_ctl/gripper/left/state
+    - /motion_ctl/gripper/right/state
+    - /state/right_arm/tcp_pos
+    - /state/left_arm/tcp_pos
+    - /camera/left_wrist/color/image_raw/compressed
+    - /camera/right_wrist/color/image_raw/compressed
+    - /camera/head/color/image_raw/compressed
+    - /lead/joint_states
+    - /motion_ctl/gripper/left
+    - /motion_ctl/gripper/right
+    - /lead/left_tcp
+    - /lead/right_tcp
+    - /move/State

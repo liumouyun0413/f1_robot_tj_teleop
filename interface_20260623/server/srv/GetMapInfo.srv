@@ -1,0 +1,5 @@
+uint8 map_type
+---
+int32 error_code
+string error_msg
+uint8[] data

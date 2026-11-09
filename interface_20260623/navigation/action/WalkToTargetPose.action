@@ -1,0 +1,13 @@
+uint8 navigtion_type
+geometry_msgs/Pose target_pose
+float64 max_speed
+LineFollowingData line_following_data
+---
+uint32 error_code
+string error_msg
+---
+uint8 status
+bool is_avoid
+geometry_msgs/Point[] avoid_points
+geometry_msgs/Pose[] global_path
+geometry_msgs/Pose[] local_path

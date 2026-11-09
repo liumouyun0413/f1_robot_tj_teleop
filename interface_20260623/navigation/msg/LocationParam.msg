@@ -1,0 +1,2 @@
+uint8 location_type
+geometry_msgs/Pose offset

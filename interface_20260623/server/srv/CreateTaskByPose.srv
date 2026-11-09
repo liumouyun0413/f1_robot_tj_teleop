@@ -1,0 +1,7 @@
+float64 max_speed
+uint32 max_loop_times
+TargetInfoWithPose[] target_list
+---
+uint32 task_id
+uint32 error_code
+string error_msg

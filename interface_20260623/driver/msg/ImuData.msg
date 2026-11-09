@@ -1,0 +1,6 @@
+std_msgs/Header header
+EulerAngles euler_angles
+geometry_msgs/Vector3 angular_velocity
+geometry_msgs/Vector3 linear_acceleration
+bool is_connected
+uint32 error_code

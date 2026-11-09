@@ -1,0 +1,6 @@
+string path
+---
+uint32 error_code
+string error_msg
+---
+float64 progress

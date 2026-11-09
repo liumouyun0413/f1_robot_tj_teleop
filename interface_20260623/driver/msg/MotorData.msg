@@ -1,0 +1,11 @@
+uint8 id
+bool is_enable
+float64 speed
+float64 position
+float64 voltage
+float64 current
+float64 temperature
+float64 cumulative_mileage
+float64 cumulative_time
+bool is_connected
+uint32 error_code

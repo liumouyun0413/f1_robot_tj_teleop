@@ -1,0 +1,6 @@
+float64 map_2d_min_z
+float64 map_2d_max_z
+float64 resolution
+---
+uint32 error_code
+string error_msg

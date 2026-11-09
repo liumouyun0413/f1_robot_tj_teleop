@@ -1,0 +1,12 @@
+uint8 navigation_mode
+float64 max_speed
+server/TargetInfoWithId[] target_list
+---
+uint32 error_code
+string error_msg
+---
+uint32 target_index
+uint32 total_target_num
+string target_id
+string target_name
+bool has_arrived_target

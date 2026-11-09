@@ -1,0 +1,10 @@
+uint8 id
+uint8 energy
+uint8 health
+bool is_in_place
+bool is_charging
+float64 voltage
+float64 current
+float64 temperature
+bool is_connected
+uint32 error_code

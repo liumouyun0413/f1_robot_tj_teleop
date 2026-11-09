@@ -1,0 +1,3 @@
+geometry_msgs/Pose target_pose
+uint8 action_type
+float64 action_param

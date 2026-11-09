@@ -1,0 +1,7 @@
+geometry_msgs/Pose target_pose
+navigation/LocationParam[] location_params
+---
+uint32 error_code
+string error_msg
+---
+geometry_msgs/Pose pose 

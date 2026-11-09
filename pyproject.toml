@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "f1_teleop"
+version = "0.1.0"
+description = "PICO teleoperation for the F1 wheeled humanoid (XRoboToolkit R1-Lite style)"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "meshcat",
+    "placo==0.9.4",
+    "pyyaml",
+    "tyro",
+    # xrobotoolkit_sdk, rclpy, control_msgs, move(srv) 由系统 / ROS2 环境提供
+]
+
+[tool.setuptools]
+packages = ["f1_teleop", "f1_teleop.common", "f1_teleop.utils", "f1_teleop.hardware", "f1_teleop.hardware.interface", "f1_teleop.config"]
+
+[tool.setuptools.package-data]
+"f1_teleop.config" = ["*.yaml"]

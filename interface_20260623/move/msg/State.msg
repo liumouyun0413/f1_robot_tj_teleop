@@ -1,0 +1,10 @@
+std_msgs/Header header
+geometry_msgs/Twist speed
+geometry_msgs/Pose odometry
+bool is_soft_auto 
+bool is_hard_auto
+bool is_joystick_on
+bool is_handle_on
+bool is_parking_mode
+bool is_avoid
+geometry_msgs/Point[] avoid_points

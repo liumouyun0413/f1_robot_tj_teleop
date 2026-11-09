@@ -1,0 +1,11 @@
+std_msgs/Header header
+bool is_handle_on
+bool is_hard_scram
+bool is_soft_scram
+bool is_hard_auto
+PowerData[] power_state
+float64 voltage
+float64 current
+float64 temperature
+bool is_connected
+uint32[] error_code

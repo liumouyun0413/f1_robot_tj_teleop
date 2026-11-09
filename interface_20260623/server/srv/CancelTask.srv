@@ -1,0 +1,4 @@
+uint32 task_id
+---
+uint32 error_code
+string error_msg
