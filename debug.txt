@@ -1,1 +1,14 @@
 [F1_D070] user@ms-thor:~/workspace/f1/install/motor_ctl/share/motor_ctl/launch$
+
+cd ~/f1_tianji_teleop && ./stop_teleop.sh && F1_PROFILE=1 ./start_teleop.sh
+
+ <!-- ==================== 关节阻抗参数配置 ==================== -->
+    <!-- 左臂刚度参数 (K) 7个关节 -->
+    <param name="left_arm_k" value="[4.0, 4.0, 3.0, 2.5, 2.0, 2.0, 2.0]" />
+    <!-- 左臂阻尼参数 (D) 7个关节 -->
+    <param name="left_arm_d" value="[0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]" />
+
+    <!-- 右臂刚度参数 (K) 7个关节 -->
+    <param name="right_arm_k" value="[4.0, 4.0, 3.0, 2.5, 2.0, 2.0, 2.0]" />
+    <!-- 右臂阻尼参数 (D) 7个关节 -->
+    <param name="right_arm_d" value="[0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]" />

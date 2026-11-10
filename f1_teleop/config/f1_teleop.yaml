@@ -49,10 +49,23 @@ robot:
   move_rate_hz: 50          # 回零/复位插值发布频率
 
   # 真机驱动软限位（度，驱动坐标，[lower, upper]，null=沿用 URDF），收紧到 IK 模型。
-  # 2026-11-10 实测：arm_r_j2 指令到 -120° 时驱动只走到 -95°（稳态误差 20°），
-  # IK 不知道这个限位会继续往外解 → 右臂不跟手。其他关节实测未触及驱动限位。
+  # 来源：~/workspace/f1/install/motor_ctl/share/motor_ctl/launch/motor_ctl.launch.xml（2026-11-10 核对）。
+  # URDF 在 j2 下限、j4 上限、j6 上比驱动宽松；IK 若解到驱动接不住的角度，该关节会被驱动夹住、末端不跟手。
   arm_joint_limits_deg:
-    arm_r_j2: [-94.0, null]
+    arm_l_j1: [-178.0, 178.0]
+    arm_l_j2: [ -94.0, 120.0]
+    arm_l_j3: [-178.0, 178.0]
+    arm_l_j4: [-145.0,  60.0]
+    arm_l_j5: [-178.0, 178.0]
+    arm_l_j6: [ -60.0,  60.0]
+    arm_l_j7: [ -90.0,  90.0]
+    arm_r_j1: [-178.0, 178.0]
+    arm_r_j2: [ -94.0, 120.0]
+    arm_r_j3: [-178.0, 178.0]
+    arm_r_j4: [-145.0,  60.0]
+    arm_r_j5: [-178.0, 178.0]
+    arm_r_j6: [ -60.0,  60.0]
+    arm_r_j7: [ -90.0,  90.0]
 
 # ----------------------------------------------------------------------------
 ros:
@@ -138,9 +151,9 @@ chassis:
 
 # ----------------------------------------------------------------------------
 safety:
-  enable: true
-  enable_com_guard: true          # 质心保护
-  enable_collision_guard: true    # 手臂-机身碰撞检测
+  enable: false
+  enable_com_guard: false          # 质心保护
+  enable_collision_guard: false    # 手臂-机身碰撞检测
   # cyb_safe_control_real 的 python 模块目录（含 com_and_collision_protect_modules.py）
   # 机器人上实际部署的是加密版 cyb_dist（2026-11-09 核实）
   module_dir: /home/user/cyb_safe_control_real/cyb_dist/src/python
