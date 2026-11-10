@@ -1,0 +1,1 @@
+[F1_D070] user@ms-thor:~/workspace/f1/install/motor_ctl/share/motor_ctl/launch$

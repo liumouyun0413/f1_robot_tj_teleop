@@ -105,6 +105,7 @@ class F1TeleopController(HardwareTeleopController):
             max_ee_ang_speed=getattr(t, "max_ee_ang_speed_rad_s", None),
             enable_joint_velocity_limits=bool(getattr(t.ik, "enable_joint_velocity_limits", False)),
         )
+        self._apply_driver_joint_limits(getattr(r, "arm_joint_limits_deg", None))
         self.sync_arm_joints(self._deg14_to_placo(self.home_pose_deg))
 
         # 运行时状态
@@ -134,6 +135,43 @@ class F1TeleopController(HardwareTeleopController):
     # ------------------------------------------------------------------ #
     # 关节映射辅助
     # ------------------------------------------------------------------ #
+    def _apply_driver_joint_limits(self, limits_cfg) -> None:
+        """把真机驱动的软限位（度，驱动坐标）收紧到 Placo 模型，避免 IK 解出驱动会裁剪的角度。"""
+        if not limits_cfg:
+            return
+        r = self.cfg.robot
+        name_to_arm = {}
+        for i, n in enumerate(r.left_joint_names):
+            name_to_arm[n] = ("left_arm", i, r.urdf_left_joint_names[i])
+        for i, n in enumerate(r.right_joint_names):
+            name_to_arm[n] = ("right_arm", i, r.urdf_right_joint_names[i])
+        for real_name, (lo_deg, hi_deg) in vars(limits_cfg).items():
+            if real_name not in name_to_arm:
+                print(f"[Placo] ⚠️ arm_joint_limits_deg 未知关节 {real_name}")
+                continue
+            arm, idx, urdf_name = name_to_arm[real_name]
+            jm = self.joint_map[arm]
+            q_off = self.placo_robot.get_joint_offset(urdf_name)
+            urdf_lo = float(self.placo_robot.model.lowerPositionLimit[q_off])
+            urdf_hi = float(self.placo_robot.model.upperPositionLimit[q_off])
+
+            def to_deg(rad):
+                full = np.zeros(7); full[idx] = rad
+                return float(jm.rad_to_deg(full)[idx])
+
+            def to_rad(deg):
+                full = np.zeros(7); full[idx] = deg
+                return float(jm.deg_to_rad(full)[idx])
+
+            # None 的一侧沿用 URDF 限位（先换算到驱动坐标，sign=-1 时上下界互换）
+            urdf_deg = sorted((to_deg(urdf_lo), to_deg(urdf_hi)))
+            d_lo = urdf_deg[0] if lo_deg is None else max(urdf_deg[0], float(lo_deg))
+            d_hi = urdf_deg[1] if hi_deg is None else min(urdf_deg[1], float(hi_deg))
+            lo, hi = sorted((to_rad(d_lo), to_rad(d_hi)))
+            self.placo_robot.set_joint_limits(urdf_name, lo, hi)
+            print(f"[Placo] {real_name}({urdf_name}) 限位收紧为 驱动[{d_lo:.1f}, {d_hi:.1f}]° = URDF[{np.rad2deg(lo):.1f}, {np.rad2deg(hi):.1f}]°")
+        self.solver.enable_joint_limits(True)
+
     def _deg14_to_placo(self, arm_deg: np.ndarray) -> Dict[str, np.ndarray]:
         return {
             "left_arm": self.joint_map["left_arm"].deg_to_rad(arm_deg[:7]),
