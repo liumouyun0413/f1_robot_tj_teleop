@@ -5,8 +5,8 @@
 #   2) PICO 数据服务 RoboticsService
 #   3) 遥操作主程序 teleop_f1_hardware.py（单进程：双臂/夹爪/头/腰/底盘/安全门/数采）
 # 日志按时间戳写入 ./log/，重启不覆盖。
+# 注意：不要开 set -u，ROS/conda 的 setup 脚本会引用未定义变量。
 # ============================================================================
-set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="${SCRIPT_DIR}/log"
