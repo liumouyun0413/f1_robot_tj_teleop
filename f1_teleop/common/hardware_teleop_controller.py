@@ -20,6 +20,7 @@ import numpy as np
 from f1_teleop.common.base_teleop_controller import BaseTeleopController
 from f1_teleop.utils.control_utils import RateLimiter, sleep_until_period
 from f1_teleop.utils.geometry import R_HEADSET_TO_WORLD
+from f1_teleop.utils.profiler import StageProfiler
 
 
 class HardwareTeleopController(BaseTeleopController, ABC):
@@ -50,6 +51,9 @@ class HardwareTeleopController(BaseTeleopController, ABC):
         self.aux_rate_hz = aux_rate_hz
         self.visualize_placo = visualize_placo
         self._viz_limiter = RateLimiter(30.0)
+        # F1_PROFILE=1 时记录各阶段耗时到 CSV（默认关闭，零开销）
+        self.prof_ik = StageProfiler("ik_thread", ["gripper", "pre_ik", "xr_read", "ik_solve", "viz", "sleep"])
+        self.prof_ctrl = StageProfiler("control_thread", ["send", "sleep"])
         if self.visualize_placo:
             self._init_placo_viz()
 
@@ -74,28 +78,42 @@ class HardwareTeleopController(BaseTeleopController, ABC):
     # ------------------------------------------------------------------ #
     def _ik_thread(self, stop_event: threading.Event) -> None:
         period = 1.0 / self.control_rate_hz
+        p = self.prof_ik
         while not stop_event.is_set():
             t0 = time.perf_counter()
+            p.begin_loop()
             try:
                 self._update_gripper_target()
+                p.mark("gripper")
                 self._pre_ik_update()
-                self._update_ik()
+                p.mark("pre_ik")
+                self._update_ik()          # 内部自行 mark xr_read / ik_solve
                 if self.visualize_placo and self._viz_limiter.ready():
                     self._update_placo_viz()
+                p.mark("viz")
             except Exception as e:  # 单帧异常不终止线程
                 print(f"[IK] 异常: {e!r}")
             sleep_until_period(t0, period)
+            p.mark("sleep")
+            p.end_loop()
+        p.close()
         print("[IK] 线程退出")
 
     def _control_thread(self, stop_event: threading.Event) -> None:
         period = 1.0 / self.control_rate_hz
+        p = self.prof_ctrl
         while not stop_event.is_set():
             t0 = time.perf_counter()
+            p.begin_loop()
             try:
                 self._send_command()
             except Exception as e:
                 print(f"[Control] 异常: {e!r}")
+            p.mark("send")
             sleep_until_period(t0, period)
+            p.mark("sleep")
+            p.end_loop()
+        p.close()
         print("[Control] 线程退出")
 
     def _aux_thread(self, stop_event: threading.Event) -> None:

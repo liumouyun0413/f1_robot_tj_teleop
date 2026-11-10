@@ -101,6 +101,9 @@ class F1TeleopController(HardwareTeleopController):
             manipulability_weight=t.ik.manipulability_weight,
             joint_regularization_weight=t.ik.joint_regularization_weight,
             workspace_radius=t.workspace_radius,
+            max_ee_speed=getattr(t, "max_ee_speed_m_s", None),
+            max_ee_ang_speed=getattr(t, "max_ee_ang_speed_rad_s", None),
+            enable_joint_velocity_limits=bool(getattr(t.ik, "enable_joint_velocity_limits", False)),
         )
         self.sync_arm_joints(self._deg14_to_placo(self.home_pose_deg))
 
@@ -374,7 +377,12 @@ class F1TeleopController(HardwareTeleopController):
         prev = self.arm.last_cmd_deg
         if prev is None:
             return arm_deg
-        return prev + np.clip(arm_deg - prev, -self._max_step_deg, self._max_step_deg)
+        delta = arm_deg - prev
+        clipped = np.clip(delta, -self._max_step_deg, self._max_step_deg)
+        if self.prof_ctrl.enabled:
+            self.prof_ctrl.note("max_step_deg", f"{np.max(np.abs(delta)):.3f}")
+            self.prof_ctrl.note("clipped", int(np.any(clipped != delta)))
+        return prev + clipped
 
     def _send_command(self) -> None:
         if not self._resetting.is_set() and any(self.active.values()):
@@ -382,6 +390,7 @@ class F1TeleopController(HardwareTeleopController):
             if self.safety:
                 arm_deg = self.safety.filter(arm_deg)
             self.arm.publish_arm_cmd(self._limit_step(arm_deg))
+            self.prof_ctrl.note("pub", 1)
             if self._gripper_limiter.ready():
                 self.arm.publish_gripper_cmd(
                     self.gripper_pos_target["left_arm"], self.gripper_pos_target["right_arm"]

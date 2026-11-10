@@ -79,10 +79,17 @@ teleop:
     frame_task_weight: 10.0
     manipulability_weight: 1.0e-4
     joint_regularization_weight: 1.0
+    # 用 URDF <limit velocity>(3.14 rad/s) 约束 QP：大跳变时所有关节按比例减速，末端路径不扭曲
+    enable_joint_velocity_limits: true
+  # 末端目标摆率限制（2026-11-10 实测：PICO WiFi 数据流每分钟数十次 50–240ms 卡顿，
+  # 恢复时手柄位姿一次性跳 5–27cm → 关节单帧跳 10–34°。这里把跳变摆成限速追赶）
+  # null = 不限制。正常手速×scale 约 ≤ 1.5 m/s，超出部分被平滑
+  max_ee_speed_m_s: 1.5
+  max_ee_ang_speed_rad_s: 4.0
   # 球形工作空间限制半径（m，球心为肩部 link）；null 表示不限制
   workspace_radius: null
-  # 下发指令每关节最大速度（°/s），限制安全门解冻 / IK 跳解时的阶跃
-  max_joint_speed_deg_s: 180.0
+  # 下发指令每关节最大速度（°/s），最后一道兑底；主要限速已由上面的 IK 速度限制和末端摆率承担
+  max_joint_speed_deg_s: 360.0
   # 夹爪指令：trigger=0 → open_cmd，trigger=1 → close_cmd
   gripper:
     open_cmd: 100.0

@@ -66,6 +66,9 @@ class BaseTeleopController(abc.ABC):
         manipulability_weight: float = 1e-4,
         joint_regularization_weight: float = 1.0,
         workspace_radius: Optional[float] = None,
+        max_ee_speed: Optional[float] = None,
+        max_ee_ang_speed: Optional[float] = None,
+        enable_joint_velocity_limits: bool = False,
     ):
         self.robot_urdf_path = robot_urdf_path
         self.manipulator_config = manipulator_config
@@ -79,6 +82,10 @@ class BaseTeleopController(abc.ABC):
         self.manipulability_weight = manipulability_weight
         self.joint_regularization_weight = joint_regularization_weight
         self.workspace_radius = workspace_radius
+        # 目标位姿摆率限制：PICO 数据流卡顿后会一次性跳变几十厘米，这里把跳变摆成限速追赶
+        self.max_ee_step = None if max_ee_speed is None else float(max_ee_speed) * dt
+        self.max_ee_ang_step = None if max_ee_ang_speed is None else float(max_ee_ang_speed) * dt
+        self.enable_joint_velocity_limits = enable_joint_velocity_limits
 
         self.xr_client = XrClient()
 
@@ -91,6 +98,9 @@ class BaseTeleopController(abc.ABC):
         self.control_mode: Dict[str, str] = {n: MODE_POSE for n in names}
         self.effector_task: Dict[str, Any] = {}
         self.arm_q_slice: Dict[str, slice] = {}
+        # 上一帧实际下发给 IK 的增量（摆率限制状态）
+        self._slew_xyz: Dict[str, np.ndarray] = {n: np.zeros(3) for n in names}
+        self._slew_rot: Dict[str, np.ndarray] = {n: np.zeros(3) for n in names}
 
         self.gripper_pos_target: Dict[str, float] = {}
         for name, config in manipulator_config.items():
@@ -112,6 +122,9 @@ class BaseTeleopController(abc.ABC):
         self.placo_robot = placo.RobotWrapper(self.robot_urdf_path)
         self.solver = placo.KinematicsSolver(self.placo_robot)
         self.solver.dt = self.dt
+        if self.enable_joint_velocity_limits:
+            # 用 URDF <limit velocity> 约束 QP，让所有关节按比例减速而非事后逐关节裁剪
+            self.solver.enable_velocity_limits(True)
 
         if self.q_init is not None:
             if self.floating_base:
@@ -166,7 +179,8 @@ class BaseTeleopController(abc.ABC):
         print(f"[Placo] 已加载 {self.robot_urdf_path}")
         for name, sl in self.arm_q_slice.items():
             print(f"[Placo] {name}: q[{sl.start}:{sl.stop}] → {self.manipulator_config[name]['link_name']}")
-        print(f"[Placo] 固定非臂关节 {len(fixed)} 个")
+        print(f"[Placo] 固定非臂关节 {len(fixed)} 个 | 关节速度限制={'开' if self.enable_joint_velocity_limits else '关'} "
+              f"| 末端摆率限制={'%.2f m/s' % (self.max_ee_step / self.dt) if self.max_ee_step else '关'}")
 
     def _get_joint_values_dict(self) -> Dict[str, float]:
         values = {}
@@ -236,6 +250,26 @@ class BaseTeleopController(abc.ABC):
         delta_rot = quat_diff_as_angle_axis(self.ref_controller_quat[name], controller_quat)
         return delta_xyz, delta_rot
 
+    def _reset_slew(self, name: str) -> None:
+        self._slew_xyz[name] = np.zeros(3)
+        self._slew_rot[name] = np.zeros(3)
+
+    def _slew_limit(self, name: str, delta_xyz: np.ndarray, delta_rot: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """限制增量每帧的变化量（即末端目标速度），摆率内则原样通过。"""
+        if self.max_ee_step is not None:
+            step = delta_xyz - self._slew_xyz[name]
+            n = np.linalg.norm(step)
+            if n > self.max_ee_step:
+                delta_xyz = self._slew_xyz[name] + step * (self.max_ee_step / n)
+        if self.max_ee_ang_step is not None:
+            step = delta_rot - self._slew_rot[name]
+            n = np.linalg.norm(step)
+            if n > self.max_ee_ang_step:
+                delta_rot = self._slew_rot[name] + step * (self.max_ee_ang_step / n)
+        self._slew_xyz[name] = np.asarray(delta_xyz, dtype=float)
+        self._slew_rot[name] = np.asarray(delta_rot, dtype=float)
+        return delta_xyz, delta_rot
+
     # ------------------------------------------------------------------ #
     # 控制模式
     # ------------------------------------------------------------------ #
@@ -264,6 +298,7 @@ class BaseTeleopController(abc.ABC):
                 self.ref_ee_xyz[name], self.ref_ee_quat[name] = self._get_link_pose(config["link_name"])
             self.ref_controller_xyz[name] = None
             self.ref_controller_quat[name] = None
+            self._reset_slew(name)
 
     def _apply_effector_target(self, name: str, delta_xyz: np.ndarray, delta_rot: np.ndarray) -> None:
         mode = self.control_mode[name]
@@ -305,6 +340,7 @@ class BaseTeleopController(abc.ABC):
     # IK 主流程
     # ------------------------------------------------------------------ #
     def _update_ik(self) -> None:
+        prof = getattr(self, "prof_ik", None)
         with self._placo_lock:
             self._update_robot_state()
             self.placo_robot.update_kinematics()
@@ -318,7 +354,11 @@ class BaseTeleopController(abc.ABC):
                     if self.ref_ee_xyz[name] is None:
                         print(f"[Teleop] {name} 激活")
                         self.ref_ee_xyz[name], self.ref_ee_quat[name] = self._get_link_pose(config["link_name"])
+                        self._reset_slew(name)
                     delta_xyz, delta_rot = self._process_xr_pose(xr_pose, name)
+                    if prof is not None:
+                        prof.note(f"{name}_dxyz_mm", f"{np.linalg.norm(delta_xyz)*1e3:.1f}")
+                    delta_xyz, delta_rot = self._slew_limit(name, delta_xyz, delta_rot)
                     self._apply_effector_target(name, delta_xyz, delta_rot)
                 else:
                     if self.ref_ee_xyz[name] is not None:
@@ -327,6 +367,7 @@ class BaseTeleopController(abc.ABC):
                         self.ref_ee_quat[name] = None
                         self.ref_controller_xyz[name] = None
                         self.ref_controller_quat[name] = None
+                        self._reset_slew(name)
                         # 末端任务回到当前位姿，松开后不再漂移
                         ee_xyz, ee_quat = self._get_link_pose(config["link_name"])
                         T = tf.quaternion_matrix(ee_quat)
@@ -334,10 +375,15 @@ class BaseTeleopController(abc.ABC):
                         self.effector_task[name].T_world_frame = T
 
             self.joints_regularization_task.set_joints(self._get_joint_values_dict())
+            if prof is not None:
+                prof.mark("xr_read")
             try:
                 self.solver.solve(True)
             except RuntimeError as e:
                 print(f"[Placo] IK solver failed: {e}")
+            if prof is not None:
+                prof.mark("ik_solve")
+                prof.note("active", "".join("1" if v else "0" for v in self.active.values()))
 
     def _update_gripper_target(self) -> None:
         for name, config in self.manipulator_config.items():
